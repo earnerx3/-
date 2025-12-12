@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Deal Admin</title>
+
+    <!-- Firebase SDK (Compat Version) -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+
+    <!-- Icons & Fonts -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-color: #f1f5f9;
+            --sidebar-bg: #1e293b;
+            --card-bg: #ffffff;
+            --text-dark: #334155;
+            --primary: #3b82f6;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+        body { background: var(--bg-color); color: var(--text-dark); display: flex; height: 100vh; overflow: hidden; }
+
+        /* --- LOGIN SCREEN --- */
+        #login-screen {
+            position: fixed; inset: 0; background: #0f172a; z-index: 9999;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .login-box {
+            background: white; padding: 2.5rem; border-radius: 1rem; width: 90%; max-width: 400px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); text-align: center;
+        }
+        .login-box h2 { color: #1e293b; margin-bottom: 1.5rem; font-weight: 700; }
+        .login-input { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #cbd5e1; border-radius: 8px; outline: none; }
+        .login-btn { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .login-btn:hover { background: #2563eb; }
+
+        /* --- DASHBOARD LAYOUT --- */
+        #admin-wrapper { display: none; width: 100%; height: 100%; }
+        
+        /* Sidebar */
+        aside {
+            width: 260px; background: var(--sidebar-bg); color: white; display: flex; flex-direction: column;
+            padding: 1.5rem 1rem; box-shadow: 4px 0 10px rgba(0,0,0,0.05);
+        }
+        aside h3 { color: #60a5fa; margin-bottom: 2.5rem; padding-left: 10px; font-size: 1.5rem; font-weight: 800; display: flex; align-items: center; gap: 10px; }
+        .menu-item {
+            padding: 12px 15px; margin-bottom: 8px; border-radius: 10px; cursor: pointer;
+            color: #94a3b8; display: flex; align-items: center; gap: 12px; transition: 0.2s; font-weight: 500; font-size: 0.95rem;
+        }
+        .menu-item:hover, .menu-item.active { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+        .menu-item i { width: 20px; text-align: center; }
+
+        /* Main Content */
+        main { flex: 1; padding: 2rem; overflow-y: auto; }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+        header h2 { font-size: 1.8rem; font-weight: 700; color: #1e293b; }
+
+        /* Content Pages */
+        .page { display: none; animation: fadeIn 0.3s ease-out; }
+        .page.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Cards */
+        .card { background: var(--card-bg); padding: 1.5rem; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); margin-bottom: 1.5rem; border: 1px solid #e2e8f0; }
+        .card h4 { margin-bottom: 1.2rem; color: #334155; font-weight: 700; border-left: 4px solid var(--primary); padding-left: 10px; }
+
+        /* Stats Grid */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+        .stat-box { background: white; padding: 1.5rem; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); border-bottom: 4px solid transparent; }
+        .stat-box h5 { color: #64748b; font-size: 0.9rem; margin-bottom: 0.5rem; font-weight: 600; }
+        .stat-box .val { font-size: 2.2rem; font-weight: 800; color: #0f172a; }
+
+        /* Form Elements */
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        label { display: block; margin-bottom: 8px; font-size: 0.85rem; font-weight: 600; color: #475569; }
+        input, select, textarea { width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.9rem; margin-bottom: 15px; outline: none; transition: 0.2s; }
+        input:focus { border-color: var(--primary); }
+        textarea { resize: vertical; height: 100px; }
+        .btn { padding: 10px 24px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+
+        /* Tables */
+        .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid #e2e8f0; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #f8fafc; text-align: left; padding: 15px; font-size: 0.85rem; color: #64748b; font-weight: 700; border-bottom: 2px solid #e2e8f0; }
+        td { padding: 15px; border-bottom: 1px solid #e2e8f0; font-size: 0.9rem; color: #334155; }
+        tr:hover { background: #f1f5f9; }
+        
+        .status-badge { padding: 5px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+        .status-pending { background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; }
+        .status-paid { background: #f0fdf4; color: #15803d; border: 1px solid #dcfce7; }
+        .status-rejected { background: #fef2f2; color: #b91c1c; border: 1px solid #fee2e2; }
+
+        @media (max-width: 768px) {
+            body { flex-direction: column; height: auto; overflow: auto; }
+            aside { width: 100%; flex-direction: row; overflow-x: auto; padding: 10px; align-items: center; }
+            aside h3 { display: none; }
+            .menu-item span { display: none; }
+            .menu-item { justify-content: center; margin-bottom: 0; }
+            .form-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen">
+        <div class="login-box">
+            <h2>Daily Deal Admin</h2>
+            <p style="color:#64748b; margin-bottom:20px; font-size:0.9rem;">Secure access only</p>
+            <input type="email" id="admin-email" class="login-input" placeholder="admin@email.com">
+            <input type="password" id="admin-pass" class="login-input" placeholder="Password">
+            <button class="login-btn" onclick="adminLogin()">Login</button>
+            <p id="login-error" style="color: var(--danger); margin-top: 10px; font-size: 0.85rem;"></p>
+        </div>
+    </div>
+
+    <!-- MAIN DASHBOARD -->
+    <div id="admin-wrapper">
+        <aside>
+            <h3><i class="fas fa-hand-holding-usd"></i> Daily Deal</h3>
+            <div class="menu-item active" onclick="switchTab('dashboard')"><i class="fas fa-chart-pie"></i> <span>Dashboard</span></div>
+            <div class="menu-item" onclick="switchTab('settings')"><i class="fas fa-sliders-h"></i> <span>App Control</span></div>
+            <div class="menu-item" onclick="switchTab('tasks')"><i class="fas fa-list-check"></i> <span>Task Manager</span></div>
+            <div class="menu-item" onclick="switchTab('withdrawals')"><i class="fas fa-wallet"></i> <span>Withdrawals</span></div>
+            <div class="menu-item" onclick="switchTab('users')"><i class="fas fa-users"></i> <span>User Base</span></div>
+            <div class="menu-item" onclick="adminLogout()" style="margin-top: auto; color: #f87171;"><i class="fas fa-sign-out-alt"></i> <span>Logout</span></div>
+        </aside>
+
+        <main>
+            <header>
+                <h2 id="page-header">Dashboard</h2>
+                <div style="font-weight: 600; color: #64748b;">Admin</div>
+            </header>
+
+            <!-- 1. DASHBOARD -->
+            <div id="dashboard" class="page active">
+                <div class="stats-grid">
+                    <div class="stat-box" style="border-bottom-color: var(--primary);">
+                        <h5>Total Users</h5>
+                        <div class="val" id="stat-users">...</div>
+                    </div>
+                    <div class="stat-box" style="border-bottom-color: var(--warning);">
+                        <h5>Pending Withdrawals</h5>
+                        <div class="val" id="stat-pending">...</div>
+                    </div>
+                    <div class="stat-box" style="border-bottom-color: var(--success);">
+                        <h5>Total Paid (Coins)</h5>
+                        <div class="val" id="stat-paid">...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. APP CONTROL (SETTINGS) -->
+            <div id="settings" class="page">
+                <div class="card">
+                    <h4><i class="fas fa-cogs"></i> App Configuration</h4>
+                    <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 20px;">Control 'settings/config' directly.</p>
+                    
+                    <div class="form-group">
+                        <label>Admin Announcement (Marquee Text)</label>
+                        <textarea id="conf-notice" placeholder="Write notice here..."></textarea>
+                    </div>
+
+                    <div class="form-grid">
+                        <div>
+                            <label>Daily Bonus (Coins)</label>
+                            <input type="number" id="conf-daily">
+                        </div>
+                        <div>
+                            <label>Referral Bonus (Coins)</label>
+                            <input type="number" id="conf-ref">
+                        </div>
+                        <div>
+                            <label>Minimum Withdraw (Coins)</label>
+                            <input type="number" id="conf-min-with">
+                        </div>
+                        <div>
+                            <label>Support Link (Telegram)</label>
+                            <input type="text" id="conf-support">
+                        </div>
+                        <div>
+                            <label>Monetag Zone ID</label>
+                            <input type="text" id="conf-monetag">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h4><i class="fas fa-ad"></i> Ad Limits & Rewards</h4>
+                    <div class="form-grid">
+                        <!-- Network 1 -->
+                        <div style="background: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                            <label style="color: var(--primary); font-size: 1rem;">Standard Ad</label>
+                            <label>Daily Limit</label>
+                            <input type="number" id="conf-net1-limit">
+                            <label>Reward Per Ad</label>
+                            <input type="number" id="conf-net1-reward">
+                        </div>
+                        <!-- Network 2 -->
+                        <div style="background: #fdf4ff; padding: 20px; border-radius: 12px; border: 1px solid #f0abfc;">
+                            <label style="color: #9333ea; font-size: 1rem;">Rewarded Ad</label>
+                            <label>Daily Limit</label>
+                            <input type="number" id="conf-net2-limit">
+                            <label>Reward Per Ad</label>
+                            <input type="number" id="conf-net2-reward">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="saveConfig()" style="width: 100%; margin-top: 20px; justify-content: center;">Save All Changes</button>
+                </div>
+            </div>
+
+            <!-- 3. TASK MANAGER -->
+            <div id="tasks" class="page">
+                <div class="card">
+                    <h4><i class="fas fa-plus-circle"></i> Create New Task</h4>
+                    <div class="form-grid">
+                        <input type="text" id="task-title" placeholder="Task Title (e.g. Join Channel)">
+                        <input type="text" id="task-link" placeholder="Link (https://t.me/...)">
+                        <input type="number" id="task-reward" placeholder="Reward (Coins)">
+                        <input type="number" id="task-seconds" placeholder="Wait Time (Seconds)">
+                    </div>
+                    <button class="btn btn-success" onclick="addTask()">Add Task</button>
+                </div>
+
+                <div class="card">
+                    <h4>Active Tasks</h4>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Title</th>
+                                    <th>Reward</th>
+                                    <th>Wait</th>
+                                    <th>Link</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tasks-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. WITHDRAWALS -->
+            <div id="withdrawals" class="page">
+                <div class="card">
+                    <h4><i class="fas fa-money-check-alt"></i> Withdrawal Requests</h4>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>User Info</th>
+                                    <th>Method</th>
+                                    <th>Payment Number</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="withdraw-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 5. USERS -->
+            <div id="users" class="page">
+                <div class="card">
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="search-uid" placeholder="Search by Telegram User ID..." style="margin-bottom: 0;">
+                        <button class="btn btn-primary" onclick="searchUser()">Search</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <h4>User Database</h4>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>User Info</th>
+                                    <th>Balance</th>
+                                    <th>Referrals</th>
+                                    <th>Status</th>
+                                    <th>Manage</th>
+                                </tr>
+                            </thead>
+                            <tbody id="users-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script>
+        // ###############################################
+        // ###    DAILY DEAL ADMIN - FIREBASE SETUP    ###
+        // ###############################################
+
+        // Your Exact Config
+        const firebaseConfig = {
+          apiKey: "AIzaSyAqFUJ41ol_IGO1Qq1nC3ItLBgi_GGduxE",
+          authDomain: "daily-deal-dfdaa.firebaseapp.com",
+          projectId: "daily-deal-dfdaa",
+          storageBucket: "daily-deal-dfdaa.firebasestorage.app",
+          messagingSenderId: "1002150750060",
+          appId: "1:1002150750060:web:f7c5208dd2ce6cb3953549",
+          measurementId: "G-Z2086F3X78"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+
+        // --- AUTH SYSTEM ---
+        function adminLogin() {
+            const e = document.getElementById('admin-email').value;
+            const p = document.getElementById('admin-pass').value;
+            const btn = document.querySelector('.login-btn');
+            
+            if(!e || !p) return alert("Please enter credentials");
+            btn.innerText = "Verifying...";
+            
+            auth.signInWithEmailAndPassword(e, p)
+                .then(() => location.reload())
+                .catch(err => {
+                    btn.innerText = "Login";
+                    document.getElementById('login-error').innerText = "Access Denied: " + err.message;
+                });
+        }
+
+        function adminLogout() {
+            auth.signOut().then(() => location.reload());
+        }
+
+        auth.onAuthStateChanged(user => {
+            if(user) {
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('admin-wrapper').style.display = 'flex';
+                initData();
+            } else {
+                document.getElementById('login-screen').style.display = 'flex';
+                document.getElementById('admin-wrapper').style.display = 'none';
+            }
+        });
+
+        // --- NAVIGATION ---
+        function switchTab(id) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            document.getElementById('page-header').innerText = id.charAt(0).toUpperCase() + id.slice(1);
+        }
+
+        function initData() {
+            loadStats();
+            loadSettings();
+            loadTasks();
+            loadWithdrawals();
+            loadUsers();
+        }
+
+        // --- 1. DASHBOARD STATS ---
+        async function loadStats() {
+            const uSnap = await db.collection('users').get();
+            document.getElementById('stat-users').innerText = uSnap.size;
+
+            const wSnap = await db.collection('withdrawals').where('status', '==', 'pending').get();
+            document.getElementById('stat-pending').innerText = wSnap.size;
+
+            let total = 0;
+            const pSnap = await db.collection('withdrawals').where('status', '==', 'paid').get();
+            pSnap.forEach(d => total += (d.data().amount || 0));
+            document.getElementById('stat-paid').innerText = total.toLocaleString();
+        }
+
+        // --- 2. SETTINGS ---
+        function loadSettings() {
+            db.collection('settings').doc('config').onSnapshot(doc => {
+                if(doc.exists) {
+                    const d = doc.data();
+                    document.getElementById('conf-notice').value = d.announcement || '';
+                    document.getElementById('conf-daily').value = d.dailyBonus || 0;
+                    document.getElementById('conf-ref').value = d.referralBonus || 0;
+                    document.getElementById('conf-min-with').value = d.minWithdraw || 0;
+                    document.getElementById('conf-support').value = d.supportLink || '';
+                    document.getElementById('conf-monetag').value = d.monetagZoneId || '';
+                    
+                    if(d.ads) {
+                        document.getElementById('conf-net1-limit').value = d.ads.net1?.limit || 0;
+                        document.getElementById('conf-net1-reward').value = d.ads.net1?.reward || 0;
+                        document.getElementById('conf-net2-limit').value = d.ads.net2?.limit || 0;
+                        document.getElementById('conf-net2-reward').value = d.ads.net2?.reward || 0;
+                    }
+                }
+            });
+        }
+
+        async function saveConfig() {
+            const data = {
+                announcement: document.getElementById('conf-notice').value,
+                dailyBonus: Number(document.getElementById('conf-daily').value),
+                referralBonus: Number(document.getElementById('conf-ref').value),
+                minWithdraw: Number(document.getElementById('conf-min-with').value),
+                supportLink: document.getElementById('conf-support').value,
+                monetagZoneId: document.getElementById('conf-monetag').value,
+                ads: {
+                    net1: {
+                        limit: Number(document.getElementById('conf-net1-limit').value),
+                        reward: Number(document.getElementById('conf-net1-reward').value)
+                    },
+                    net2: {
+                        limit: Number(document.getElementById('conf-net2-limit').value),
+                        reward: Number(document.getElementById('conf-net2-reward').value)
+                    }
+                }
+            };
+
+            if(confirm("Confirm update settings?")) {
+                await db.collection('settings').doc('config').set(data, { merge: true });
+                alert("Settings Updated!");
+            }
+        }
+
+        // --- 3. TASKS ---
+        function loadTasks() {
+            db.collection('tasks').onSnapshot(snap => {
+                const b = document.getElementById('tasks-body');
+                b.innerHTML = '';
+                snap.forEach(doc => {
+                    const t = doc.data();
+                    b.innerHTML += `
+                        <tr>
+                            <td>${t.title}</td>
+                            <td><b style="color:var(--success)">${t.reward}</b></td>
+                            <td>${t.seconds}s</td>
+                            <td><a href="${t.link}" target="_blank">Link</a></td>
+                            <td><button class="btn btn-danger btn-sm" onclick="delTask('${doc.id}')"><i class="fas fa-trash"></i></button></td>
+                        </tr>`;
+                });
+            });
+        }
+
+        async function addTask() {
+            const title = document.getElementById('task-title').value;
+            const link = document.getElementById('task-link').value;
+            const reward = Number(document.getElementById('task-reward').value);
+            const seconds = Number(document.getElementById('task-seconds').value);
+
+            if(!title || !link) return alert("Missing fields");
+
+            await db.collection('tasks').add({ title, link, reward, seconds });
+            alert("Task Added");
+            document.getElementById('task-title').value = '';
+        }
+
+        async function delTask(id) {
+            if(confirm("Delete Task?")) await db.collection('tasks').doc(id).delete();
+        }
+
+        // --- 4. WITHDRAWALS ---
+        function loadWithdrawals() {
+            db.collection('withdrawals').orderBy('date', 'desc').limit(50).onSnapshot(snap => {
+                const b = document.getElementById('withdraw-body');
+                b.innerHTML = '';
+                if(snap.empty) { b.innerHTML = '<tr><td colspan="7" style="text-align:center">No requests</td></tr>'; return; }
+
+                snap.forEach(doc => {
+                    const w = doc.data();
+                    let badge = 'status-pending';
+                    let act = '';
+                    
+                    if(w.status === 'paid') badge = 'status-paid';
+                    if(w.status === 'rejected') badge = 'status-rejected';
+
+                    if(w.status === 'pending') {
+                        act = `
+                        <button class="btn btn-success btn-sm" onclick="handlePay('${doc.id}', 'paid', ${w.amount}, '${w.userId}')" title="Pay">
+                            <i class="fas fa-check"></i>
+                        </button>
+                        <button class="btn btn-danger btn-sm" style="margin-left:5px" onclick="handlePay('${doc.id}', 'rejected', ${w.amount}, '${w.userId}')" title="Reject">
+                            <i class="fas fa-times"></i>
+                        </button>`;
+                    } else {
+                        act = '<span style="color:#aaa">Done</span>';
+                    }
+
+                    const date = w.date ? w.date.toDate().toLocaleDateString() : 'N/A';
+                    
+                    b.innerHTML += `
+                        <tr>
+                            <td>${date}</td>
+                            <td>${w.username}<br><small style="color:#aaa">${w.userId}</small></td>
+                            <td>${w.method}</td>
+                            <td><span style="font-family:monospace; font-size:1.1em; font-weight:bold; color:var(--primary)">${w.number}</span></td>
+                            <td><b>${w.amount}</b></td>
+                            <td><span class="status-badge ${badge}">${w.status}</span></td>
+                            <td>${act}</td>
+                        </tr>`;
+                });
+            });
+        }
+
+        async function handlePay(id, status, amount, uid) {
+            if(!confirm(`Mark as ${status.toUpperCase()}?`)) return;
+
+            const batch = db.batch();
+            batch.update(db.collection('withdrawals').doc(id), { status: status });
+
+            // Refund if rejected
+            if(status === 'rejected' && uid) {
+                batch.update(db.collection('users').doc(uid), {
+                    balance: firebase.firestore.FieldValue.increment(amount),
+                    totalWithdraw: firebase.firestore.FieldValue.increment(-amount)
+                });
+            }
+            await batch.commit();
+            alert("Updated!");
+        }
+
+        // --- 5. USERS ---
+        function loadUsers() {
+            db.collection('users').orderBy('createdAt', 'desc').limit(10).get().then(snap => renderUsers(snap));
+        }
+
+        async function searchUser() {
+            const uid = document.getElementById('search-uid').value;
+            if(!uid) return loadUsers();
+            
+            try {
+                const doc = await db.collection('users').doc(uid).get();
+                const b = document.getElementById('users-body');
+                b.innerHTML = '';
+                if(doc.exists) renderUserRow(doc, b);
+                else b.innerHTML = '<tr><td colspan="5" style="text-align:center; color:red">User Not Found</td></tr>';
+            } catch(e) { console.error(e); }
+        }
+
+        function renderUsers(snap) {
+            const b = document.getElementById('users-body');
+            b.innerHTML = '';
+            snap.forEach(doc => renderUserRow(doc, b));
+        }
+
+        function renderUserRow(doc, container) {
+            const u = doc.data();
+            const isBanned = u.banned === true;
+            container.innerHTML += `
+                <tr>
+                    <td><b>${u.firstName}</b><br><small style="color:#aaa">${doc.id}</small></td>
+                    <td style="color:var(--success); font-weight:bold">${u.balance?.toFixed(2)}</td>
+                    <td>${u.referrals || 0}</td>
+                    <td>${isBanned ? '<span class="status-badge status-rejected">BANNED</span>' : '<span class="status-badge status-paid">ACTIVE</span>'}</td>
+                    <td>
+                        <button class="btn btn-primary btn-sm" onclick="editBal('${doc.id}', ${u.balance})">Edit</button>
+                        <button class="btn btn-${isBanned ? 'success' : 'danger'} btn-sm" onclick="banUser('${doc.id}', ${!isBanned})">
+                            ${isBanned ? 'Unban' : 'Ban'}
+                        </button>
+                    </td>
+                </tr>`;
+        }
+
+        async function editBal(uid, old) {
+            const n = prompt("New Balance:", old);
+            if(n && !isNaN(n)) {
+                await db.collection('users').doc(uid).update({ balance: Number(n) });
+                alert("Balance Updated");
+                searchUser();
+            }
+        }
+
+        async function banUser(uid, status) {
+            if(confirm(status ? "Ban User?" : "Unban User?")) {
+                await db.collection('users').doc(uid).update({ banned: status });
+                alert("Status Updated");
+                searchUser();
+            }
+        }
+
+    </script>
+</body>
+</html>
