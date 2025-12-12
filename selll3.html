@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Daily Deal App</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <style>
+        /* --- CORE THEME --- */
+        body {
+            background-color: #0f172a; /* Slate 900 */
+            color: #f8fafc;
+            font-family: 'Segoe UI', sans-serif;
+            overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
+            min-height: 100vh;
+            user-select: none;
+        }
+
+        /* Glass Panel */
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s ease-in-out;
+        }
+        
+        /* Nav Bar */
+        .nav-bar {
+            position: fixed; bottom: 0; left: 0; width: 100%;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid #334155;
+            display: flex; justify-content: space-around;
+            padding: 10px 0 25px 0; z-index: 50;
+        }
+        .nav-item {
+            display: flex; flex-direction: column; align-items: center;
+            font-size: 10px; color: #64748b; width: 20%; transition: 0.3s;
+        }
+        .nav-item.active { color: #38bdf8; transform: translateY(-2px); }
+        .nav-item i { font-size: 18px; margin-bottom: 4px; }
+
+        /* Page Transitions */
+        .page-section { display: none; padding: 20px; padding-bottom: 100px; animation: fadeIn 0.4s ease-out; }
+        .page-section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Ban Overlay */
+        #ban-overlay {
+            display: none; position: fixed; inset: 0; 
+            background: rgba(15, 23, 42, 0.98); z-index: 9999;
+            flex-direction: column; justify-content: center; align-items: center; text-align: center;
+            padding: 20px;
+        }
+
+        /* Payment Selection */
+        .pay-method {
+            border: 2px solid transparent; opacity: 0.6; filter: grayscale(1);
+        }
+        .pay-method.selected {
+            border-color: #3b82f6; opacity: 1; filter: grayscale(0); background: rgba(59, 130, 246, 0.1);
+        }
+
+        /* Dust Particles */
+        .dust-particle {
+            position: absolute; width: 6px; height: 6px; background-color: #94a3b8;
+            border-radius: 50%; pointer-events: none; z-index: 9999;
+        }
+        @keyframes floatUp {
+            0% { transform: translate(0, 0) scale(1); opacity: 1; }
+            100% { transform: translate(var(--tx), -100px) scale(0); opacity: 0; }
+        }
+        
+        /* Custom Scrollbar */
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <div id="ban-overlay">
+        <div class="glass-panel p-8 w-full max-w-sm border-red-500/30 border">
+            <i class="fas fa-user-lock text-5xl text-red-500 mb-4 animate-bounce"></i>
+            <h2 class="text-2xl font-bold text-white mb-2" id="ban-title">অ্যাকাউন্ট রেস্ট্রিকটেড</h2>
+            <p class="text-slate-400 text-sm mb-6" id="ban-reason">Security violation detected.</p>
+            <div id="temp-ban-timer" class="hidden mb-4 text-xl font-mono text-yellow-400">00:00:00</div>
+            <a id="ban-contact-btn" href="#" class="inline-block w-full bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-xl font-bold transition">
+                <i class="fas fa-headset mr-2"></i> সাপোর্ট
+            </a>
+        </div>
+    </div>
+
+    <div class="px-5 pt-6 pb-2 sticky top-0 bg-[#0f172a] z-40 shadow-sm shadow-slate-900">
+        <div class="flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full border border-slate-600 overflow-hidden relative">
+                    <img id="user-photo" src="https://via.placeholder.com/150" class="w-full h-full object-cover">
+                    <div class="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-[#0f172a]"></div>
+                </div>
+                <div>
+                    <h2 class="text-[10px] text-slate-400 uppercase tracking-widest">Hello,</h2>
+                    <h3 class="font-bold text-base text-white truncate max-w-[120px]" id="username">Loading...</h3>
+                </div>
+            </div>
+            <div class="glass-panel px-3 py-1.5 flex items-center gap-2 border-blue-500/30">
+                <i class="fas fa-coins text-yellow-400"></i>
+                <span class="font-bold text-lg text-white" id="balance">0.00</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="app-content">
+
+        <div id="home" class="page-section active">
+            
+            <div class="glass-panel p-5 mb-5 relative overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 shadow-lg">
+                <div class="flex justify-between items-start z-10 relative">
+                    <div>
+                        <h3 class="text-lg font-bold text-white">ডেইলি বোনাস</h3>
+                        <p class="text-slate-400 text-xs mb-3">প্রতি ২৪ ঘণ্টায় একবার</p>
+                    </div>
+                    <div class="bg-yellow-500/20 p-2 rounded-lg">
+                        <i class="fas fa-gift text-2xl text-yellow-500 animate-pulse"></i>
+                    </div>
+                </div>
+                
+                <button id="btn-daily-bonus" onclick="claimDailyBonus()" class="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white py-2.5 rounded-xl font-bold shadow-lg transition active:scale-95 text-sm">
+                    বোনাস নিন (+<span id="daily-amount-display">0</span>)
+                </button>
+                
+                <div id="bonus-timer-box" class="hidden w-full bg-slate-700/50 text-slate-300 py-2.5 rounded-xl font-bold text-center border border-slate-600 text-sm">
+                    পরবর্তী বোনাস: <span id="bonus-countdown" class="text-yellow-400 font-mono ml-1">00:00:00</span>
+                </div>
+            </div>
+
+            <h3 class="font-bold text-slate-500 mb-3 text-[11px] uppercase tracking-wider pl-1">আমার ড্যাশবোর্ড</h3>
+            <div class="grid grid-cols-2 gap-3 mb-6">
+                <div class="glass-panel p-3 text-center">
+                    <i class="fas fa-wallet text-green-400 text-xl mb-1"></i>
+                    <div class="text-[10px] text-slate-400">মোট ইনকাম</div>
+                    <div class="font-bold text-base" id="stat-income">0</div>
+                </div>
+                <div class="glass-panel p-3 text-center">
+                    <i class="fas fa-paper-plane text-blue-400 text-xl mb-1"></i>
+                    <div class="text-[10px] text-slate-400">উইথড্র</div>
+                    <div class="font-bold text-base" id="stat-withdraw">0</div>
+                </div>
+                <div class="glass-panel p-3 text-center">
+                    <i class="fas fa-users text-purple-400 text-xl mb-1"></i>
+                    <div class="text-[10px] text-slate-400">রেফার</div>
+                    <div class="font-bold text-base" id="stat-refer">0</div>
+                </div>
+                <div class="glass-panel p-3 text-center">
+                    <i class="fas fa-bolt text-red-400 text-xl mb-1"></i>
+                    <div class="text-[10px] text-slate-400">স্ট্রাইক</div>
+                    <div class="font-bold text-base text-red-400" id="stat-strikes">0/3</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tasks" class="page-section">
+            <h2 class="text-lg font-bold mb-4 border-l-4 border-blue-500 pl-3">ইনকাম জোন</h2>
+            
+            <div class="bg-red-500/10 border border-red-500/20 p-3 rounded-lg mb-4 flex gap-3 items-center">
+                <i class="fas fa-exclamation-triangle text-red-400 text-xl"></i>
+                <p class="text-[10px] text-red-200 leading-tight">সতর্কতা: অ্যাড লোড হওয়ার পর কমপক্ষে <span class="font-bold text-white">১৫ সেকেন্ড</span> অপেক্ষা করতে হবে। দ্রুত কাটলে অটো ব্যান খাবেন।</p>
+            </div>
+
+            <div class="space-y-3 mb-6">
+                <div class="glass-panel p-3 flex justify-between items-center transition" >
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-lg">
+                            <i class="fas fa-ad"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-sm text-white">Premium Ad</h4>
+                            <p class="text-[10px] text-slate-400">Limit: <span id="limit-net1">0/0</span></p>
+                        </div>
+                    </div>
+                    <button onclick="watchAd('net1')" class="bg-blue-500 hover:bg-blue-400 text-white px-4 py-2 rounded-lg text-xs font-bold active:scale-95 transition">
+                        Watch +<span id="reward-net1">0</span>
+                    </button>
+                </div>
+
+                <div class="glass-panel p-3 flex justify-between items-center transition">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-purple-600 flex items-center justify-center text-white shadow-lg">
+                            <i class="fas fa-video"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-sm text-white">Video Ad</h4>
+                            <p class="text-[10px] text-slate-400">Limit: <span id="limit-net2">0/0</span></p>
+                        </div>
+                    </div>
+                    <button onclick="watchAd('net2')" class="bg-purple-500 hover:bg-purple-400 text-white px-4 py-2 rounded-lg text-xs font-bold active:scale-95 transition">
+                        Watch +<span id="reward-net2">0</span>
+                    </button>
+                </div>
+            </div>
+
+            <h3 class="font-bold text-slate-400 mb-3 text-xs">অন্যান্য টাস্ক</h3>
+            <div id="task-list-container" class="space-y-3">
+                <p class="text-center text-xs text-slate-600 py-4">লোড হচ্ছে...</p>
+            </div>
+        </div>
+
+        <div id="shop" class="page-section">
+            <div class="flex justify-between items-end mb-4">
+                <h2 class="text-lg font-bold border-l-4 border-yellow-500 pl-3">প্রিমিয়াম শপ</h2>
+                <button onclick="openShopLink()" class="text-[10px] bg-yellow-500 text-black font-bold px-3 py-1 rounded-full">See All <i class="fas fa-arrow-right"></i></button>
+            </div>
+
+            <p class="text-xs text-slate-400 mb-4 text-center">নিচের যেকোনো প্রোডাক্টে ক্লিক করে কিনুন।</p>
+
+            <div class="grid grid-cols-2 gap-3" id="shop-container">
+                </div>
+        </div>
+
+        <div id="wallet" class="page-section">
+            <div class="bg-gradient-to-r from-blue-700 to-indigo-800 rounded-2xl p-6 text-center shadow-lg shadow-blue-900/40 mb-6 relative overflow-hidden">
+                <div class="absolute -top-10 -right-10 w-32 h-32 bg-white blur-3xl opacity-10 rounded-full"></div>
+                <p class="text-blue-100 text-xs tracking-widest uppercase">Current Balance</p>
+                <h1 class="text-4xl font-bold text-white my-2" id="wallet-balance">0.00</h1>
+                <p class="text-[10px] text-blue-200 bg-black/20 inline-block px-3 py-1 rounded-full backdrop-blur-md">
+                    মিনিমাম উইথড্র: <span id="min-withdraw-display">0</span> কয়েন
+                </p>
+            </div>
+
+            <h3 class="font-bold mb-3 text-xs text-slate-400 uppercase">পেমেন্ট মেথড</h3>
+            <div id="payment-methods-grid" class="grid grid-cols-2 gap-3 mb-6">
+                </div>
+
+            <div class="space-y-4">
+                <div class="relative">
+                    <i class="fas fa-phone absolute left-4 top-3.5 text-slate-500 text-sm"></i>
+                    <input type="number" id="wd-number" placeholder="পার্সোনাল মোবাইল নাম্বার" class="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 pl-10 pr-4 text-white text-sm focus:outline-none focus:border-blue-500 transition">
+                </div>
+                <div class="relative">
+                    <i class="fas fa-coins absolute left-4 top-3.5 text-slate-500 text-sm"></i>
+                    <input type="number" id="wd-amount" placeholder="উইথড্র অ্যামাউন্ট" class="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 pl-10 pr-4 text-white text-sm focus:outline-none focus:border-blue-500 transition">
+                </div>
+                <button onclick="requestWithdraw()" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3.5 rounded-xl shadow-lg mt-2 active:scale-95 transition flex items-center justify-center gap-2">
+                    <i class="fas fa-paper-plane"></i> রিকোয়েস্ট পাঠান
+                </button>
+            </div>
+        </div>
+
+        <div id="profile" class="page-section">
+            <div class="flex flex-col items-center mb-6 pt-4">
+                <div class="w-24 h-24 rounded-full p-1 border-2 border-dashed border-slate-600 mb-3 overflow-hidden">
+                    <img id="profile-img-big" src="" class="w-full h-full object-cover rounded-full">
+                </div>
+                <h2 class="text-xl font-bold text-white" id="profile-name">...</h2>
+                <div class="inline-block mt-2 px-3 py-1 bg-green-500/10 text-green-400 text-[10px] font-bold rounded-full border border-green-500/20 tracking-wider">VERIFIED</div>
+            </div>
+
+            <div class="glass-panel p-5 mb-4">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400"><i class="fas fa-users"></i></div>
+                    <div>
+                        <h4 class="font-bold text-sm text-slate-200">রেফার অ্যান্ড আর্ন</h4>
+                        <p class="text-[10px] text-slate-400">প্রতি রেফারে নিশ্চিত বোনাস!</p>
+                    </div>
+                </div>
+                
+                <div class="bg-slate-800/50 p-3 rounded-lg flex items-center justify-between border border-slate-700 mb-3">
+                    <code id="ref-link-text" class="text-xs text-slate-300 truncate mr-2 font-mono">Generating...</code>
+                    <button onclick="copyReferral()" class="text-indigo-400 hover:text-white transition"><i class="fas fa-copy"></i></button>
+                </div>
+
+                <button onclick="shareReferral()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-xl font-bold text-sm flex justify-center items-center gap-2 transition active:scale-95">
+                    <i class="fab fa-telegram-plane"></i> বন্ধুদের শেয়ার করুন
+                </button>
+            </div>
+
+            <div class="glass-panel p-4 flex items-center justify-between cursor-pointer active:bg-slate-800 transition border-l-4 border-pink-500" onclick="openSupport()">
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-full bg-pink-500/20 flex items-center justify-center text-pink-400"><i class="fas fa-headset"></i></div>
+                    <div>
+                        <h4 class="font-bold text-sm text-slate-200">হেল্প সেন্টার</h4>
+                        <p class="text-[10px] text-slate-400">যেকোনো সমস্যায় যোগাযোগ করুন</p>
+                    </div>
+                </div>
+                <div class="bg-slate-700 w-8 h-8 rounded-full flex items-center justify-center">
+                    <i class="fas fa-chevron-right text-slate-400 text-xs"></i>
+                </div>
+            </div>
+            
+            <p class="text-center text-slate-700 text-[10px] font-mono mt-10" id="uid-footer">UID: ...</p>
+        </div>
+
+    </div>
+
+    <div class="nav-bar">
+        <div class="nav-item active" onclick="switchTab('home')"><i class="fas fa-home"></i><span>Home</span></div>
+        <div class="nav-item" onclick="switchTab('tasks')"><i class="fas fa-layer-group"></i><span>Tasks</span></div>
+        <div class="nav-item" onclick="switchTab('shop')"><i class="fas fa-store"></i><span>Shop</span></div>
+        <div class="nav-item" onclick="switchTab('wallet')"><i class="fas fa-wallet"></i><span>Wallet</span></div>
+        <div class="nav-item" onclick="switchTab('profile')"><i class="fas fa-user"></i><span>Profile</span></div>
+    </div>
+
+    <script type="module">
+        // --- 1. CONFIGURATION & IMPORTS ---
+        
+        // **********************************************
+        // ********** BOT USERNAME SETTING **************
+        const BOT_USERNAME = "YOUR_BOT_USERNAME"; // Bot username here (no @)
+        const APP_SHORT_NAME = "app"; 
+        // **********************************************
+
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { 
+            getFirestore, doc, setDoc, getDoc, updateDoc, 
+            onSnapshot, collection, increment, addDoc, serverTimestamp, runTransaction 
+        } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // FIREBASE CONFIG
+        const firebaseConfig = {
+          apiKey: "AIzaSyAqFUJ41ol_IGO1Qq1nC3ItLBgi_GGduxE",
+          authDomain: "daily-deal-dfdaa.firebaseapp.com",
+          projectId: "daily-deal-dfdaa",
+          storageBucket: "daily-deal-dfdaa.firebasestorage.app",
+          messagingSenderId: "1002150750060",
+          appId: "1:1002150750060:web:f7c5208dd2ce6cb3953549",
+          measurementId: "G-Z2086F3X78"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // State Variables
+        let currentUser = null;
+        let dbUser = null;
+        let settings = { 
+            dailyBonus: 50, 
+            minWithdraw: 5000, 
+            supportLink: "https://t.me/your_support", 
+            monetagZoneId: "10312256", // Updated Zone ID
+            announcement: "স্বাগতম আমাদের অ্যাপে!",
+            referralBonus: 100, 
+            joinBonus: 50,
+            paymentMethods: []
+        };
+        let adSettings = { net1: {limit: 5, reward: 10}, net2: {limit: 5, reward: 10} };
+        let selectedPayMethod = null;
+
+        // --- 2. INITIALIZATION ---
+        window.addEventListener('load', async () => {
+            if (window.Telegram && window.Telegram.WebApp) {
+                const tg = window.Telegram.WebApp;
+                tg.ready();
+                tg.expand();
+                tg.setHeaderColor('#0f172a');
+                tg.setBackgroundColor('#0f172a');
+                currentUser = tg.initDataUnsafe.user;
+            }
+            
+            if (!currentUser) currentUser = { id: 'test_user_001', first_name: 'Test', last_name: 'User', photo_url: 'https://via.placeholder.com/150' };
+
+            document.getElementById('username').innerText = currentUser.first_name;
+            document.getElementById('profile-name').innerText = currentUser.first_name;
+            document.getElementById('uid-footer').innerText = `UID: ${currentUser.id}`;
+            
+            const refLink = `https://t.me/${BOT_USERNAME}/${APP_SHORT_NAME}?startapp=ref_${currentUser.id}`;
+            document.getElementById('ref-link-text').innerText = refLink;
+
+            if(currentUser.photo_url) {
+                document.getElementById('user-photo').src = currentUser.photo_url;
+                document.getElementById('profile-img-big').src = currentUser.photo_url;
+            }
+
+            renderShop();
+            await initFirebase();
+            setInterval(checkDailyBonusTimer, 1000);
+        });
+
+        // --- 3. FIREBASE & USER LOGIC ---
+        async function initFirebase() {
+            await signInAnonymously(auth);
+            const uid = currentUser.id.toString();
+
+            // Fetch Settings
+            const configSnap = await getDoc(doc(db, "settings", "config"));
+            if (configSnap.exists()) {
+                const data = configSnap.data();
+                settings = { ...settings, ...data };
+                updateSettingsUI(settings);
+                if(settings.monetagZoneId) loadMonetagScript(settings.monetagZoneId);
+            } else {
+                // If no config in firebase, use default with new ID
+                loadMonetagScript(settings.monetagZoneId);
+            }
+
+            onSnapshot(doc(db, "users", uid), async (docSnap) => {
+                if (docSnap.exists()) {
+                    dbUser = docSnap.data();
+                    handleSecuritySystem();
+                    updateUI(dbUser);
+                } else {
+                    await createNewUser(uid);
+                }
+            });
+
+            onSnapshot(doc(db, "settings", "config"), (s) => {
+                if (s.exists()) {
+                    const data = s.data();
+                    settings = { ...settings, ...data };
+                    updateSettingsUI(settings);
+                    
+                    const lastSeen = localStorage.getItem('notice_date');
+                    const today = new Date().toDateString();
+                    if(settings.announcement && lastSeen !== today) {
+                        showWelcomeNotice(settings.announcement);
+                        localStorage.setItem('notice_date', today);
+                    }
+                }
+            });
+
+            loadTasks();
+        }
+
+        async function createNewUser(uid) {
+            Swal.showLoading();
+            let referredBy = null;
+            let startParam = window.Telegram.WebApp.initDataUnsafe.start_param;
+
+            if (startParam && startParam.startsWith('ref_')) {
+                let refId = startParam.replace('ref_', '');
+                if (refId !== uid) referredBy = refId;
+            }
+
+            const newUser = {
+                id: currentUser.id, 
+                firstName: currentUser.first_name,
+                balance: settings.joinBonus || 0,
+                banned: false, strikes: 0,
+                totalIncome: settings.joinBonus || 0, 
+                totalWithdraw: 0, adsWatched: 0, referrals: 0,
+                referredBy: referredBy,
+                lastBonusTime: 0,
+                createdAt: serverTimestamp(),
+                adCounts: { net1: 0, net2: 0, date: new Date().toDateString() }
+            };
+
+            try {
+                await setDoc(doc(db, "users", uid), newUser);
+
+                if (referredBy) {
+                    try {
+                        const refBonus = settings.referralBonus || 0;
+                        await updateDoc(doc(db, "users", referredBy), {
+                            balance: increment(refBonus),
+                            referrals: increment(1)
+                        });
+                    } catch (e) { console.log("Referrer not found"); }
+                }
+
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Welcome!',
+                    text: `অ্যাকাউন্ট তৈরি সফল! আপনি ${settings.joinBonus} কয়েন বোনাস পেয়েছেন।`,
+                    confirmButtonText: 'Great!',
+                    background: '#1e293b', color: '#fff'
+                });
+
+            } catch (error) {
+                console.error("Error creating user:", error);
+            }
+        }
+
+        function updateSettingsUI(data) {
+            document.getElementById('daily-amount-display').innerText = data.dailyBonus;
+            document.getElementById('min-withdraw-display').innerText = data.minWithdraw;
+            if(data.ads) adSettings = data.ads;
+            renderPaymentMethods();
+            updateAdUI();
+        }
+
+        // --- 4. MONETAG AD SYSTEM (FIXED FOR NEW SDK) ---
+        function loadMonetagScript(zoneId) {
+            // Check if already exists
+            if(document.getElementById('monetag-script-dynamic')) return;
+            
+            const s = document.createElement('script');
+            s.id = 'monetag-script-dynamic';
+            
+            // New SDK Source
+            s.src = '//libtl.com/sdk.js'; 
+            
+            // New Data Attributes
+            s.dataset.zone = zoneId;
+            s.dataset.sdk = 'show_' + zoneId; 
+            
+            // Note: async is handled by the script itself mostly, but good to have
+            // document.head.appendChild(s); 
+            // Better to append to body or head
+            document.body.appendChild(s);
+        }
+
+        window.watchAd = async (netId) => {
+            if(dbUser.banned) return showToast('error', 'অ্যাকাউন্ট রেস্ট্রিকটেড!');
+            
+            const today = new Date().toDateString();
+            let counts = dbUser.adCounts || { net1: 0, net2: 0, date: today };
+            if(counts.date !== today) counts = { net1: 0, net2: 0, date: today };
+
+            const limit = adSettings[netId]?.limit || 5;
+            const reward = adSettings[netId]?.reward || 10;
+
+            if(counts[netId] >= limit) return showToast('warning', 'আজকের লিমিট শেষ!');
+
+            // Monetag Dynamic Call
+            const zoneId = settings.monetagZoneId; 
+            const functionName = `show_${zoneId}`; 
+
+            if (typeof window[functionName] === 'function') {
+                const startTime = Date.now();
+                Swal.fire({
+                    title: 'অ্যাড লোড হচ্ছে...',
+                    text: 'অনুগ্রহ করে অপেক্ষা করুন',
+                    allowOutsideClick: false,
+                    didOpen: () => Swal.showLoading(),
+                    background: '#1e293b', color: '#fff'
+                });
+
+                window[functionName]().then(async () => {
+                    Swal.close();
+                    const duration = (Date.now() - startTime) / 1000;
+
+                    if (duration < 15) {
+                        handleStrike(); 
+                    } else {
+                        const updateObj = {};
+                        updateObj[`adCounts.${netId}`] = increment(1);
+                        updateObj[`adCounts.date`] = today;
+                        updateObj['balance'] = increment(reward);
+                        updateObj['totalIncome'] = increment(reward);
+                        updateObj['adsWatched'] = increment(1);
+                        
+                        await updateDoc(doc(db, "users", dbUser.id.toString()), updateObj);
+                        showToast('success', `অভিনন্দন! +${reward} কয়েন যুক্ত হয়েছে।`);
+                    }
+                }).catch(e => {
+                    Swal.close();
+                    console.error(e);
+                    showToast('error', 'অ্যাড লোড হয়নি, আবার চেষ্টা করুন।');
+                });
+            } else {
+                console.log("Function not found:", functionName);
+                showToast('error', 'Ad Config Error: Please check internet or restart app.');
+            }
+        }
+
+        // --- 5. SHOP SYSTEM ---
+        function renderShop() {
+            const container = document.getElementById('shop-container');
+            const products = [
+                { title: 'Smart Gadget', price: '1,250', img: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=300' },
+                { title: 'Watch Series 8', price: '850', img: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=300' },
+                { title: 'Wireless Pods', price: '650', img: 'https://images.unsplash.com/photo-1572569028738-411a09774a1f?w=300' },
+                { title: 'Fast Charger', price: '990', img: 'https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?w=300' }
+            ];
+
+            container.innerHTML = '';
+            products.forEach(p => {
+                container.innerHTML += `
+                    <div onclick="openShopLink()" class="glass-panel p-2 flex flex-col items-center group transition duration-200 hover:bg-slate-800 cursor-pointer">
+                        <div class="w-full h-28 rounded-lg overflow-hidden mb-2 relative">
+                            <img src="${p.img}" class="w-full h-full object-cover group-hover:scale-110 transition duration-500">
+                            <div class="absolute bottom-0 right-0 bg-yellow-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-tl-lg">৳${p.price}</div>
+                        </div>
+                        <div class="text-xs font-bold text-slate-200 w-full truncate px-1 mb-2">${p.title}</div>
+                        <button class="w-full bg-slate-700 hover:bg-blue-600 text-white text-[10px] py-1.5 rounded-lg font-bold transition">
+                            Buy Now <i class="fas fa-shopping-cart ml-1"></i>
+                        </button>
+                    </div>
+                `;
+            });
+        }
+
+        window.openShopLink = () => {
+            const url = "https://dailydeal.sell-bazar.com";
+            if (window.Telegram && window.Telegram.WebApp) {
+                window.Telegram.WebApp.openLink(url);
+            } else {
+                window.open(url, '_blank');
+            }
+        }
+
+        // --- 6. UTILITIES & UI ---
+        function updateUI(u) {
+            document.getElementById('balance').innerText = u.balance.toFixed(2);
+            document.getElementById('wallet-balance').innerText = u.balance.toFixed(2);
+            document.getElementById('stat-refer').innerText = u.referrals || 0;
+            document.getElementById('stat-income').innerText = (u.totalIncome || 0).toFixed(2);
+            document.getElementById('stat-withdraw').innerText = (u.totalWithdraw || 0).toFixed(2);
+            document.getElementById('stat-strikes').innerText = `${u.strikes || 0}/3`;
+            updateAdUI();
+        }
+
+        function updateAdUI() {
+            if(!dbUser) return;
+            const today = new Date().toDateString();
+            let counts = dbUser.adCounts || { net1: 0, net2: 0, date: today };
+            if(counts.date !== today) counts = { net1: 0, net2: 0, date: today };
+            document.getElementById('limit-net1').innerText = `${counts.net1}/${adSettings.net1?.limit || 5}`;
+            document.getElementById('reward-net1').innerText = adSettings.net1?.reward || 0;
+            document.getElementById('limit-net2').innerText = `${counts.net2}/${adSettings.net2?.limit || 5}`;
+            document.getElementById('reward-net2').innerText = adSettings.net2?.reward || 0;
+        }
+
+        async function handleStrike() {
+            const newStrikes = (dbUser.strikes || 0) + 1;
+            let updateData = { strikes: increment(1) };
+            let msg = 'ওয়ার্নিং: আপনি খুব দ্রুত অ্যাড কেটে দিয়েছেন!';
+
+            if (newStrikes >= 3) {
+                const banDuration = 2 * 60 * 60 * 1000; 
+                updateData.tempBanUntil = new Date(Date.now() + banDuration);
+                updateData.strikes = 0;
+                msg = 'নিয়ম লঙ্ঘনের কারণে ২ ঘন্টার জন্য রেস্ট্রিকটেড!';
+            }
+            await updateDoc(doc(db, "users", dbUser.id.toString()), updateData);
+            Swal.fire({ icon: 'error', title: 'সতর্কতা!', text: msg, background: '#1e293b', color: '#fff' });
+        }
+
+        function handleSecuritySystem() {
+            const overlay = document.getElementById('ban-overlay');
+            const main = document.getElementById('app-content');
+            
+            if (dbUser.banned || (dbUser.tempBanUntil && dbUser.tempBanUntil.toMillis() > Date.now())) {
+                overlay.style.display = 'flex';
+                main.style.filter = 'blur(10px)';
+                document.getElementById('ban-contact-btn').onclick = () => window.Telegram.WebApp.openTelegramLink(settings.supportLink);
+                return;
+            }
+            overlay.style.display = 'none';
+            main.style.filter = 'none';
+        }
+
+        function loadTasks() {
+            onSnapshot(collection(db, "tasks"), (snap) => {
+                const list = document.getElementById('task-list-container');
+                list.innerHTML = "";
+                if(snap.empty) {
+                    list.innerHTML = '<p class="text-center text-xs text-slate-500">আপাতত কোনো টাস্ক নেই</p>';
+                    return;
+                }
+                snap.forEach(d => {
+                    const t = d.data();
+                    const taskId = d.id;
+                    const startTime = localStorage.getItem(`task_start_${taskId}`);
+                    let btnHtml = '';
+
+                    if (startTime) {
+                        const elapsed = (Date.now() - parseInt(startTime)) / 1000;
+                        if (elapsed >= t.seconds) {
+                            btnHtml = `<button onclick="window.claimTask('${taskId}', ${t.reward})" class="bg-green-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold animate-pulse shadow-lg">CLAIM</button>`;
+                        } else {
+                            btnHtml = `<button class="bg-slate-600 text-slate-400 px-3 py-1.5 rounded-lg text-xs font-bold cursor-wait">WAIT...</button>`;
+                        }
+                    } else {
+                        btnHtml = `<button onclick="window.startTask('${taskId}', '${t.link}', ${t.seconds})" class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg border border-indigo-500">START</button>`;
+                    }
+                    
+                    list.insertAdjacentHTML('beforeend', `
+                        <div id="task-card-${taskId}" class="glass-panel p-3 flex justify-between items-center transition">
+                            <div class="flex items-center gap-3">
+                                <div class="bg-blue-900/40 p-2 rounded-lg text-blue-400"><i class="fas fa-link"></i></div>
+                                <div><h4 class="font-bold text-sm text-slate-200">${t.title}</h4><span class="text-[10px] text-yellow-500 font-bold">+${t.reward} Coins</span></div>
+                            </div>
+                            <div id="task-action-${taskId}">${btnHtml}</div>
+                        </div>
+                    `);
+                });
+            });
+        }
+
+        window.startTask = (id, link, sec) => {
+             Swal.fire({
+                title: 'টাস্ক শুরু', text: `${sec} সেকেন্ড ভিজিট করুন`, 
+                icon: 'info', showCancelButton: true, confirmButtonText: 'ভিজিট করুন',
+                background: '#1e293b', color: '#fff'
+            }).then((r) => {
+                if(r.isConfirmed) {
+                    window.Telegram.WebApp.openLink(link);
+                    localStorage.setItem(`task_start_${id}`, Date.now().toString());
+                    loadTasks();
+                }
+            });
+        }
+        
+        function createDustEffect(element) {
+            const rect = element.getBoundingClientRect();
+            for (let i = 0; i < 30; i++) {
+                const p = document.createElement('div');
+                p.classList.add('dust-particle');
+                p.style.left = (rect.left + Math.random() * rect.width) + 'px';
+                p.style.top = (rect.top + Math.random() * rect.height) + 'px';
+                p.style.setProperty('--tx', (Math.random() - 0.5) * 100 + 'px');
+                p.style.animation = `floatUp ${0.8 + Math.random() * 0.5}s ease-out forwards`;
+                document.body.appendChild(p);
+                setTimeout(() => p.remove(), 1500);
+            }
+        }
+
+        window.claimTask = async (id, reward) => {
+            const card = document.getElementById(`task-card-${id}`);
+            createDustEffect(card);
+            card.style.opacity = '0';
+            card.style.transform = 'scale(0.8)';
+            await updateDoc(doc(db, "users", dbUser.id.toString()), { balance: increment(reward), totalIncome: increment(reward) });
+            localStorage.removeItem(`task_start_${id}`);
+            setTimeout(() => card.remove(), 600);
+            showToast('success', `টাস্ক কমপ্লিট! +${reward}`);
+        }
+
+        // --- Payment Logic ---
+        function renderPaymentMethods() {
+            const container = document.getElementById('payment-methods-grid');
+            container.innerHTML = '';
+            const methods = settings.paymentMethods && settings.paymentMethods.length > 0 
+                ? settings.paymentMethods 
+                : [
+                    { id: 'bkash', name: 'bKash', icon: 'https://freelogopng.com/images/all_img/1656235199bkash-logo-transparent.png' },
+                    { id: 'nagad', name: 'Nagad', icon: 'https://freelogopng.com/images/all_img/1679248828nagad-logo-png.png' }
+                  ];
+
+            methods.forEach(m => {
+                const div = document.createElement('div');
+                div.className = 'pay-method glass-panel p-4 flex flex-col items-center justify-center cursor-pointer transition h-24';
+                div.onclick = () => selectMethod(m.id, m.name, div);
+                div.innerHTML = `<img src="${m.icon}" class="h-8 mb-2 object-contain"><span class="text-xs font-bold text-slate-300">${m.name}</span>`;
+                container.appendChild(div);
+            });
+        }
+
+        window.selectMethod = (id, name, el) => {
+            selectedPayMethod = name;
+            document.querySelectorAll('.pay-method').forEach(x => x.classList.remove('selected'));
+            el.classList.add('selected');
+        }
+
+        window.requestWithdraw = async () => {
+            const num = document.getElementById('wd-number').value;
+            const amt = parseInt(document.getElementById('wd-amount').value);
+
+            if(!selectedPayMethod) return showToast('error', 'পেমেন্ট মেথড সিলেক্ট করুন');
+            if(!num || num.length < 10) return showToast('error', 'সঠিক নাম্বার দিন');
+            if(!amt || amt < settings.minWithdraw) return showToast('error', `মিনিমাম উইথড্র ${settings.minWithdraw}`);
+            if(dbUser.balance < amt) return showToast('error', 'পর্যাপ্ত ব্যালেন্স নেই');
+
+            try {
+                await updateDoc(doc(db, "users", dbUser.id.toString()), { 
+                    balance: increment(-amt), totalWithdraw: increment(amt) 
+                });
+                await addDoc(collection(db, "withdrawals"), {
+                    userId: dbUser.id.toString(), username: dbUser.firstName,
+                    method: selectedPayMethod, number: num, amount: amt,
+                    status: 'pending', date: serverTimestamp()
+                });
+                
+                Swal.fire({
+                    icon: 'success',
+                    title: 'সফল!',
+                    text: 'আপনার পেমেন্ট রিকোয়েস্ট সফলভাবে পাঠানো হয়েছে।',
+                    background: '#1e293b', color: '#fff'
+                });
+                
+                document.getElementById('wd-number').value = '';
+                document.getElementById('wd-amount').value = '';
+            } catch (error) { showToast('error', 'সার্ভার এরর'); }
+        }
+
+        // Shared Functions
+        window.openSupport = () => window.Telegram.WebApp.openTelegramLink(settings.supportLink);
+
+        window.copyReferral = () => {
+            const link = `https://t.me/${BOT_USERNAME}/${APP_SHORT_NAME}?startapp=ref_${dbUser.id}`;
+            navigator.clipboard.writeText(link);
+            showToast('success', 'রেফার লিংক কপি হয়েছে!');
+        }
+
+        window.shareReferral = () => {
+            const link = `https://t.me/${BOT_USERNAME}/${APP_SHORT_NAME}?startapp=ref_${dbUser.id}`;
+            const text = `🔥 এই অ্যাপ থেকে আমি প্রতিদিন ইনকাম করছি! \n💰 তুমিও জয়েন করো আর বোনাস নাও। \n👇 লিংক: \n${link}`;
+            const url = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`;
+            window.Telegram.WebApp.openTelegramLink(url);
+        }
+
+        window.switchTab = (id) => {
+            document.querySelectorAll('.page-section').forEach(e => e.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
+            const map = { home:0, tasks:1, shop:2, wallet:3, profile:4 };
+            document.querySelectorAll('.nav-item')[map[id]].classList.add('active');
+            window.scrollTo(0,0);
+        }
+
+        function checkDailyBonusTimer() {
+            if(!dbUser) return;
+            const btn = document.getElementById('btn-daily-bonus');
+            const timerBox = document.getElementById('bonus-timer-box');
+            const countdownEl = document.getElementById('bonus-countdown');
+            const now = Date.now();
+            const lastBonus = dbUser.lastBonusTime || 0;
+            const nextBonus = lastBonus + (24 * 60 * 60 * 1000);
+
+            if (now < nextBonus) {
+                btn.classList.add('hidden');
+                timerBox.classList.remove('hidden');
+                const diff = nextBonus - now;
+                const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
+                const m = Math.floor((diff / (1000 * 60)) % 60);
+                const s = Math.floor((diff / 1000) % 60);
+                countdownEl.innerText = `${h}:${m}:${s}`;
+            } else {
+                btn.classList.remove('hidden');
+                timerBox.classList.add('hidden');
+            }
+        }
+        
+        window.claimDailyBonus = async () => {
+            if(dbUser.banned) return;
+            await updateDoc(doc(db, "users", dbUser.id.toString()), { 
+                balance: increment(settings.dailyBonus),
+                totalIncome: increment(settings.dailyBonus),
+                lastBonusTime: Date.now()
+            });
+            showToast('success', `অভিনন্দন! +${settings.dailyBonus} ডেইলি বোনাস`);
+        }
+
+        function showWelcomeNotice(text) {
+            Swal.fire({
+                title: '📢 নোটিশ',
+                html: `<div class="text-left text-sm text-slate-300 custom-scroll" style="max-height: 200px; overflow-y: auto;">${text}</div>`,
+                background: '#1e293b',
+                color: '#fff',
+                showCloseButton: true, showConfirmButton: false,
+                timer: 5000, timerProgressBar: true
+            });
+        }
+
+        function showToast(icon, title) {
+            const Toast = Swal.mixin({
+                toast: true, position: 'top', showConfirmButton: false, timer: 2500,
+                timerProgressBar: true, background: '#1e293b', color: '#fff'
+            });
+            Toast.fire({ icon: icon, title: title });
+        }
+    </script>
+</body>
+</html>
